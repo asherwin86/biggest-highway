@@ -1,0 +1,30 @@
+# Player saves: everyone keeps their own (the game makes a new one if missing)
+save.json
+save.tmp
+*.sav
+
+# Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
+# PyInstaller output (publish the .exe as a GitHub Release instead)
+build/
+dist/
+
+# Local test screenshots and logs (README images live in docs/)
+shots/*
+!shots/run.ps1
+
+# Editors / OS
+.vscode/
+.idea/
+Thumbs.db
+desktop.ini
+.DS_Store
+
+# Blender backup files
+*.blend1
+*.blend2
