@@ -14,8 +14,11 @@ def main():
     ap.add_argument('--fresh', action='store_true', help='ignore save.json and start at kilometre 0')
     ap.add_argument('--shot', help='save a screenshot to this path after --frames frames, then quit')
     ap.add_argument('--frames', type=int, default=120)
+    ap.add_argument('--no-update-check', action='store_true', help="don't check GitHub for a newer version")
+    ap.add_argument('--check-update', action='store_true', help='check for updates even when run from source')
+    ap.add_argument('--auto-update', action='store_true', help='install an available update without asking (testing)')
     ap.add_argument('--timescale', type=float, default=1.0, help='run the simulation faster (testing)')
-    ap.add_argument('--scene', choices=['drive', 'night', 'city', 'fly', 'top', 'map', 'auto', 'traffic', 'hyper', 'mapall', 'flyover', 'citynight', 'show0', 'show1', 'show2', 'show3', 'show4', 'park', 'popup', 'signal', 'padmenu', 'padmap', 'paddrive', 'cityturn', 'citywall'],
+    ap.add_argument('--scene', choices=['drive', 'night', 'city', 'fly', 'top', 'map', 'auto', 'traffic', 'hyper', 'mapall', 'flyover', 'citynight', 'show0', 'show1', 'show2', 'show3', 'show4', 'park', 'popup', 'signal', 'padmenu', 'padmap', 'paddrive', 'cityturn', 'citywall', 'onramp', 'offramp', 'citynav', 'airnav'],
                     help='scripted setup used with --shot for testing')
     args = ap.parse_args()
 

@@ -7,6 +7,7 @@ from ursina import Button, Color, Entity, Mesh, Quad, Slider, Text, camera, colo
 
 from .. import coords
 from ..citylayout import CX, CZ, EW_STREETS, NS_STREETS, X_ORIGIN, chunk_origin_x, lots_near
+from .. import ramps
 from ..config import LANES
 from ..autopark import AutoPark
 from .viz3d import FSDView
@@ -93,6 +94,7 @@ class Dashboard:
         self.streets = [Entity(parent=self.map_root, model='quad', color=Color(0.32, 0.34, 0.38, 1), z=-0.005)
                         for _ in range(24)]
         self.route = [Entity(parent=self.map_root, model='quad', color=ACCENT, z=-0.012) for _ in range(60)]
+        self.ramp_marks = [Entity(parent=self.map_root, model='quad', z=-0.008, enabled=False) for _ in range(16)]
         self.lot_btns = []
         for _ in range(14):
             b = Button('P', parent=self.map_root, scale=(0.026, 0.026), color=ACCENT, z=-0.02,
@@ -102,7 +104,7 @@ class Dashboard:
             self.lot_btns.append(b)
         self.me = Entity(parent=self.map_root, model=_tri(), scale=(0.016, 0.022), color=color.white, z=-0.03,
                          double_sided=True)
-        self.map_title = _t(r, 'City parking below  -  tap a P', MX0 + 0.01, MY1 - 0.016, 0.62, DIM, z=-0.04)
+        self.map_title = _t(r, 'Tap a P to park   green ENTRANCE   orange EXIT', MX0 + 0.01, MY1 - 0.016, 0.62, DIM, z=-0.04)
 
         # --- Auto Park pop-up ---
         self.popup = Entity(parent=r, enabled=False, z=-0.06)
@@ -305,6 +307,32 @@ class Dashboard:
                     e.color = Color(0.3, 0.32, 0.36, 1)
                     i += 1
         for e in self.streets[i:]:
+            e.enabled = False
+
+        # ENTRANCE (green) and EXIT (orange) ramps on the streets under the glass medians
+        j = 0
+        top_s, bot_s = (MY1 - py) / k, (MY0 - py) / k          # visible stretch relative to the car
+        period = ramps.RAMP_PERIOD
+        for dcx in range(-2, 3):
+            mx = chunk_origin_x(cx0 + dcx)
+            ux = ui(mx, 0)[0]
+            if not (MX0 + 0.004 < ux < MX1 - 0.004) or ramps.median_index(mx) is None:
+                continue
+            first = math.floor((p.s + bot_s) / period) * period
+            for base in (first - period, first, first + period):
+                for start, end, col in ((ramps.ON_START, ramps.ON_END, Color(0.25, 0.85, 0.4, 1)),
+                                        (ramps.OFF_START, ramps.OFF_END, Color(1.0, 0.55, 0.15, 1))):
+                    a = max(base + start - p.s, bot_s)
+                    b = min(base + end - p.s, top_s - 0.03 / k)
+                    if b <= a or j >= len(self.ramp_marks):
+                        continue
+                    e = self.ramp_marks[j]
+                    j += 1
+                    e.enabled = True
+                    e.color = col
+                    e.position = (ux, py + (a + b) / 2 * k, -0.008)
+                    e.scale = (0.006, (b - a) * k)
+        for e in self.ramp_marks[j:]:
             e.enabled = False
 
         # parking lots (refresh the list a few times a second)

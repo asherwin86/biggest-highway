@@ -11,6 +11,7 @@ from ..config import (BAND_LANES, BAND_PERIOD, BAND_W, BANDS_EACH_SIDE, CITY_Y,
                       DECK_AHEAD, DECK_BEHIND, DECK_THICK, GAP_W, LANE_W, NUM_BANDS)
 from ..citylayout import PILLAR_BAND_X
 from .meshkit import MeshKit
+from .ramps_view import MedianSlot, entrance_sign_mesh, exit_sign_mesh, ramp_mesh
 
 L = DECK_BEHIND + DECK_AHEAD
 Z_MID = (DECK_AHEAD - DECK_BEHIND) / 2
@@ -85,16 +86,15 @@ def _gantry_mesh(width):
 
 
 class BandSlot:
-    def __init__(self, parent, glow_parent, tex, meshes):
+    def __init__(self, parent, glow_parent, tex, meshes, ramp_meshes):
         self.band = None
+        self.median = MedianSlot(parent, ramp_meshes)
         self.deck = Entity(parent=parent, model='plane', texture=tex, double_sided=True)
         self.slab = Entity(parent=parent, model='cube', color=color.rgb(0.42, 0.43, 0.46))
         self.edge_l = Entity(parent=parent, model='cube', color=color.rgb(0.95, 0.95, 0.92))
         self.edge_r = Entity(parent=parent, model='cube', color=color.rgb(0.95, 0.95, 0.92))
         self.bar_l = Entity(parent=parent, model='cube', color=color.rgb(0.7, 0.7, 0.72))
         self.bar_r = Entity(parent=parent, model='cube', color=color.rgb(0.7, 0.7, 0.72))
-        self.glass = Entity(parent=parent, model='plane', color=Color(0.55, 0.85, 1.0, 0.22),
-                            double_sided=True)
         self.struct = Entity(parent=parent)
         self.heads = Entity(parent=glow_parent)
         self.gantries = []
@@ -116,7 +116,7 @@ class BandSlot:
                   self.struct, self.heads):
             e.enabled = on
         if not on:
-            self.glass.enabled = False
+            self.median.set_enabled(False)
             for g, _, _ in self.gantries:
                 g.enabled = False
             return
@@ -135,8 +135,7 @@ class BandSlot:
         for g, t, key in self.gantries:
             self._insts.append(gantry.instanceTo(g))
             key[0] = None
-        self.glass.enabled = band < NUM_BANDS - 1
-        self.glass.scale = (GAP_W, 1, L)
+        self.median.set_enabled(band < NUM_BANDS - 1)
         self.width = w
 
     def place(self, player_s, player_x, gantry_marks):
@@ -151,7 +150,7 @@ class BandSlot:
         self.edge_r.position = (left + w - 0.3, 0.012, Z_MID)
         self.bar_l.position = (left - 0.25, 0.55, Z_MID)
         self.bar_r.position = (left + w + 0.25, 0.55, Z_MID)
-        self.glass.position = (left + w + GAP_W / 2, -0.05, Z_MID)
+        self.median.place(player_s, left + w + GAP_W / 2)
         s0 = player_s - DECK_BEHIND
         self.deck.set_shader_input('texture_offset', Vec2(0, (s0 / TILE) % 1.0))
         # pillar/lamp rows are aligned to world multiples of PILLAR_STEP
@@ -172,7 +171,7 @@ class BandSlot:
     def set_brightness(self, b):
         for e, c in zip(self.dimmable, self.base_colors):
             e.color = Color(c[0] * b, c[1] * b, c[2] * b, c[3])
-        self.glass.color = Color(0.55 * b, 0.85 * b, 1.0 * b, 0.22)
+        self.median.set_brightness(b)
         self.struct.setColorScale(b, b, b, 1)
         for g, t, _ in self.gantries:
             g.setColorScale(b, b, b, 1)
@@ -182,7 +181,10 @@ class Highway:
     def __init__(self, parent, glow_parent):
         self.tex = lane_texture()
         self._mesh_cache = {}
-        self.slots = [BandSlot(parent, glow_parent, self.tex, self._meshes) for _ in range(SLOTS)]
+        ramp_meshes = {'on': ramp_mesh('on'), 'off': ramp_mesh('off'),
+                       'exit': exit_sign_mesh(), 'entrance': entrance_sign_mesh()}
+        self.slots = [BandSlot(parent, glow_parent, self.tex, self._meshes, ramp_meshes)
+                      for _ in range(SLOTS)]
         self.finish = Entity(parent=parent, model='plane', texture=checker_texture(), enabled=False)
         self.finish_text = Text('START / FINISH', parent=parent, scale=120, origin=(0, 0), y=14,
                                 color=color.white, enabled=False)

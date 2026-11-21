@@ -5,6 +5,7 @@ from ursina import Button, Color, Entity, Quad, Text, application, camera, color
 
 from .. import coords
 from ..vehicles import CARS
+from ..version import VERSION
 
 ACCENT = Color(0.22, 0.52, 1.0, 1)
 ROW = Color(0.13, 0.14, 0.18, 1)
@@ -58,6 +59,7 @@ class QuickMenu:
             (lambda: 'Map and search', self._then(g.toggle_map), None),
             (lambda: f'Screen: {"shown" if g.dashboard.root.enabled else "hidden"}', g.dashboard.toggle, None),
             (lambda: 'Controls help', self._then(g.show_help), None),
+            (lambda: f'Check for updates  (you have v{VERSION})', self._then(lambda: g.update_prompt.check_now()), None),
             (lambda: 'Quit game  (press again to confirm)' if self.confirm_quit else 'Quit game', self._quit, None),
         ]
 

@@ -2,7 +2,7 @@
 import math
 from dataclasses import dataclass, field
 
-from . import citylayout, coords
+from . import citylayout, coords, ramps
 from .config import (CITY_Y, DECK_THICK, DECK_Y, EXPRESS_LATERAL, GHOST_SPEED,
                      HYPER_SPEED, MAX_ALT)
 
@@ -54,6 +54,7 @@ class Controls:
     target_x: float = None      # lane-change target (lateral metres)
     express: bool = False       # fast lateral transfer across many lanes
     hyper: bool = False         # allow hyper speed
+    target_alt: float = None    # autopilot: altitude to fly at
 
 
 @dataclass
@@ -95,16 +96,23 @@ class PlayerCar:
     def under_deck(self) -> bool:
         return self.alt < DECK_Y - 1
 
-    def ground_and_ceiling(self, x: float, alt: float):
+    def ground_and_ceiling(self, x: float, alt: float, s: float = None):
+        s = self.s if s is None else s
         surface = coords.surface_at_x(x)
+        ramp = ramps.surface(x, s)
         if alt >= DECK_Y - 1:                      # at or above the deck
+            if ramp is not None and ramp < DECK_Y - 0.25:
+                return ramp, MAX_ALT               # over a ramp opening in the median
             if surface == 'road' or (surface == 'glass' and not self.flying):
                 return DECK_Y, MAX_ALT
-            return CITY_Y, MAX_ALT                 # fly down through glass / off the edge
+            return (ramp if ramp is not None else CITY_Y), MAX_ALT   # fly down through glass / off the edge
+        ground = CITY_Y
+        if ramp is not None and alt >= ramp - 1.5:
+            ground = ramp                          # driving on a ramp
         ceiling = DECK_Y - DECK_THICK - 1.0
-        if surface == 'air' or (surface == 'glass' and self.flying):
-            ceiling = MAX_ALT                      # can climb back up here
-        return CITY_Y, ceiling
+        if surface == 'air' or (surface == 'glass' and (self.flying or ramp is not None)):
+            ceiling = MAX_ALT                      # open sky above (glass, ramp opening, edge)
+        return ground, ceiling
 
     # ---- commands ------------------------------------------------------
     def teleport(self, s: float, x: float, alt: float = DECK_Y):
@@ -192,21 +200,30 @@ class PlayerCar:
             new_x = coords.clamp_x(new_x)
             if coords.surface_at_x(new_x) == 'air':
                 new_x = coords.clamp_x(self.x)
+            # ramp openings have barriers: enter an EXIT only from its top end,
+            # leave an ENTRANCE only at its top end (Express / Hyper pass over)
+            if (not (self.express_active or self.hyper_active)
+                    and ramps.opening(self.x, self.s) != ramps.opening(new_x, self.s)):
+                new_x = self.x
+                self.vx = 0.0
         self.x = new_x
 
         # --- vertical ---
         ground, ceiling = self.ground_and_ceiling(self.x, self.alt)
         if self.flying:
-            want_vy = (c.up - c.down) * 28.0
+            if c.target_alt is not None:
+                want_vy = max(-28.0, min(28.0, (c.target_alt - self.alt) * 0.9))
+            else:
+                want_vy = (c.up - c.down) * 28.0
             self.vy += (want_vy - self.vy) * min(1.0, dt * 4)
             new_alt = self.alt + self.vy * dt
         else:
-            if self.alt > ground + 0.01:
+            if self.alt - ground > 1.5:
                 self.vy = max(self.vy - 9.81 * dt, -14.0)   # gentle auto-land
                 new_alt = self.alt + self.vy * dt
             else:
                 self.vy = 0.0
-                new_alt = ground
+                new_alt = ground                            # stick to roads and ramps
         if new_alt < ground:
             new_alt, self.vy = ground, max(0.0, self.vy)
         if new_alt > ceiling:
@@ -279,9 +296,17 @@ class PlayerCar:
     def _blocked(self, x, s, a):
         hl, hw = self.spec.length / 2, self.spec.width / 2
         ca, sa = math.cos(a), math.sin(a)
+        here = ramps.surface(self.x, self.s)
+        on_ramp = here is not None and abs(self.alt - here) < 1.6
         for fl, fw in ((hl, hw), (hl, -hw), (-hl, hw), (-hl, -hw)):
             px = x + sa * fl + ca * fw
             ps = s + ca * fl - sa * fw
-            if citylayout.solid_at(px, ps):
+            if self.alt < CITY_Y + 3 and citylayout.solid_at(px, ps):
                 return True
+            rs = ramps.surface(px, ps)
+            if on_ramp:
+                if rs is None and self.alt - CITY_Y > 1.5:
+                    return True                    # ramp side barrier
+            elif rs is not None and 1.5 < rs - self.alt < 4.5:
+                return True                        # low end of a ramp is a wall from the street
         return False

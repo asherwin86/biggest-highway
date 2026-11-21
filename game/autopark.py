@@ -79,6 +79,33 @@ def _finish(stage):
     return stage
 
 
+def sample_stage(st, d):
+    """Position, heading (degrees) and speed cap at distance d along a stage."""
+    L = st.lengths
+    if d <= 0:
+        j = 0
+    elif d >= L[-1]:
+        j = len(L) - 2
+    else:
+        lo, hi = 0, len(L) - 1
+        while hi - lo > 1:
+            mid = (lo + hi) // 2
+            if L[mid] <= d:
+                lo = mid
+            else:
+                hi = mid
+        j = lo
+    j = max(0, min(j, len(st.pts) - 2))
+    a, b = st.pts[j], st.pts[j + 1]
+    seg = max(1e-6, L[j + 1] - L[j])
+    u = max(0.0, min(1.0, (d - L[j]) / seg))
+    x = a[0] + (b[0] - a[0]) * u
+    s = a[1] + (b[1] - a[1]) * u
+    heading = math.degrees(math.atan2(b[0] - a[0], b[1] - a[1]))
+    cap = min(a[2], b[2])
+    return x, s, heading, cap
+
+
 class AutoPark:
     def __init__(self):
         self.state = 'idle'        # idle / active / parked
@@ -165,29 +192,7 @@ class AutoPark:
 
     # ------------------------------------------------------------ driving
     def _sample(self, st, d):
-        L = st.lengths
-        if d <= 0:
-            j = 0
-        elif d >= L[-1]:
-            j = len(L) - 2
-        else:
-            lo, hi = 0, len(L) - 1
-            while hi - lo > 1:
-                mid = (lo + hi) // 2
-                if L[mid] <= d:
-                    lo = mid
-                else:
-                    hi = mid
-            j = lo
-        j = max(0, min(j, len(st.pts) - 2))
-        a, b = st.pts[j], st.pts[j + 1]
-        seg = max(1e-6, L[j + 1] - L[j])
-        u = max(0.0, min(1.0, (d - L[j]) / seg))
-        x = a[0] + (b[0] - a[0]) * u
-        s = a[1] + (b[1] - a[1]) * u
-        heading = math.degrees(math.atan2(b[0] - a[0], b[1] - a[1]))
-        cap = min(a[2], b[2])
-        return x, s, heading, cap
+        return sample_stage(st, d)
 
     def update(self, dt, car):
         """Moves the car along the plan. Returns an event string or None."""

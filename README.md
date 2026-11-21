@@ -2,11 +2,19 @@
 
 **Drive a 1,000,000-lane highway that wraps around the whole Earth.**
 
-A 3D driving game written in Python ([Ursina](https://www.ursinaengine.org/) on [Panda3D](https://www.panda3d.org/)), with car models built in [Blender](https://www.blender.org/). It has full self-driving, Auto Park, an endless city under the highway, a flying roadster, full controller support and a map 1,000,000,000 km wide.
+A 3D driving game written in Python ([Ursina](https://www.ursinaengine.org/) on [Panda3D](https://www.panda3d.org/)), with car models built in [Blender](https://www.blender.org/). It's a full **open world**: you start in an endless city, explore, then take a ramp up and merge onto the highway. Self-driving works on the streets, on the highway and in the air. There's also Auto Park, a flying roadster, full controller support, a map 1,000,000,000 km wide, and an auto-updater in the exe.
 
 ![Self-driving on the highway, with the EV-style touchscreen](docs/screenshots/hero.png)
 
 ## Features
+
+### Open world: city and highway
+- **You start down in the city.** Drive anywhere: real steering, corners, U-turns, solid buildings.
+- **ENTRANCE ramps** climb from the streets up through openings in the glass medians. At the top you merge into the highway traffic.
+- **EXIT ramps** take you back down. Steer onto the median glass, follow the green EXIT sign and drive into the opening.
+- Every median has an ENTRANCE and an EXIT every 2 km. The screen's city map shows them in green and orange.
+
+![Merging onto the highway from an ENTRANCE ramp](docs/screenshots/onramp.png)
 
 ### The highway
 - **1,000,000 lanes**, in bands of 48 separated by **glass medians** you can look (or fly) down through.
@@ -14,9 +22,12 @@ A 3D driving game written in Python ([Ursina](https://www.ursinaengine.org/) on 
 - The world is generated as you drive. Only the lanes, city blocks and traffic near you exist at any moment, so it runs at 60 FPS anywhere on the loop.
 - **Day and night cycle**, with street lights and lit windows after dark.
 
-### Full self-driving
-- Keeps its lane, holds a safe gap to the car ahead and overtakes slow traffic by itself.
-- **Navigates** to anything you pick on the map. For far-away places it uses *Lane Express* (sliding sideways across thousands of lanes) and *Hyper mode* (up to 30,000 km/h).
+### Full self-driving, everywhere
+- **On the highway** it keeps its lane, holds a safe gap to the car ahead and overtakes slow traffic by itself.
+- **In the city** it drives the street grid, keeping to the right-hand side and taking corners and U-turns.
+- **In the air** (Volt Roadster) it climbs to 150 m, flies straight to the destination, and lands on a lane or drops through a glass median into the city.
+- **It switches between them by itself.** Pick anything on the map and it works out the trip. From the city to the highway it takes an ENTRANCE ramp. From the highway to a city place it takes the right EXIT. City trips longer than 3 km use the highway.
+- For far-away places it uses *Lane Express* (sliding sideways across thousands of lanes) and *Hyper mode* (up to 30,000 km/h).
 - **Turn-signal lane changes**: tap Q / E (or LB / RB) and the blinker comes on. The car changes lanes as soon as there is a safe gap.
 - A live **3D view** on the screen shows the lanes, the cars around you, the car you're following and the planned path.
 
@@ -52,6 +63,13 @@ Aero Sedan, Trail SUV, Bolt GT, Cargo Hauler, and the **Volt Roadster**, which f
 
 Grab `BiggestHighway.exe` from the [Releases](../../releases) page. It's a single file for 64-bit Windows and doesn't need Python. It saves your progress to `save.json` next to the exe.
 
+**Auto-updates (v1.1 and later).** When the exe starts, it quietly checks this repo's latest release. If there's a newer version, a pop-up offers to update. Choose **Update now** and it:
+1. downloads the new exe next to the old one,
+2. checks its size and SHA-256 against what GitHub reports,
+3. closes the game, swaps the files and restarts. Your save is kept.
+
+If anything fails, nothing is changed. You can also check by hand from the menu (Esc / Back, then **Check for updates**), or start the exe with `--no-update-check` to turn the check off. The check is a single anonymous request to the public GitHub API. v1.0 has no updater, so get v1.1 by hand once.
+
 ## Run from source
 
 Needs Python 3.13 (Panda3D doesn't ship wheels for 3.14 yet).
@@ -82,7 +100,7 @@ Add `--fresh` to start at kilometre 0 and ignore your save.
 | [ / ] or PgUp / PgDn | D-pad left / right | jump 1,000 lanes |
 | C | R3 (click right stick) | camera: chase, far, cockpit, top, side |
 | X | L3 (click left stick) | warp (up to 30,000 km/h) |
-| R | (menu) | back up to the highway deck |
+| R | (menu) | jump straight up to the highway deck (or take an ENTRANCE ramp) |
 | H | (menu) | hide the screen |
 | Esc | Back | menu with every option |
 | F1 | (menu) | help |
@@ -106,6 +124,9 @@ game/
   traffic.py             traffic simulation + auto-adapt density
   autopilot.py           self-driving, navigation, turn-signal lane changes
   autopark.py            Auto Park route planning and driving
+  ramps.py               ENTRANCE / EXIT ramps between the city and the deck
+  navigator.py           self-driving across city, ramps, highway and air
+  updater.py version.py  exe auto-updater (GitHub Releases)
   citylayout.py          streets, blocks and parking spaces (shared by everything)
   destinations.py        destinations + fuzzy search
   controller.py          gamepad support
@@ -133,9 +154,16 @@ You can also open a `.glb` in Blender, change it and export it again. Keep the c
 .venv\Scripts\python -m pytest tests
 ```
 
-These cover loop wrap-around, lane maths, traffic, self-driving decisions, turn signals, Auto Park end to end (from the deck, from the city, across the loop seam), city steering and walls, map search, and loading broken saves.
+These cover:
+- loop wrap-around, lane maths and traffic
+- self-driving decisions and turn signals
+- Auto Park end to end (from the deck, from the city, across the loop seam)
+- driving up and down ramps, and their barriers
+- self-driving trips between the city, the highway and the air
+- city steering and walls
+- map search, loading broken saves, and the updater's version and checksum checks
 
-`shots\run.ps1 -scene <name>` runs a scripted scene in the real game and saves a screenshot to `shots\`. The scenes are: drive, night, city, citynight, fly, flyover, top, map, mapall, auto, hyper, traffic, popup, park, signal, cityturn, citywall, padmenu, padmap, paddrive, show0 to show4. Add `-timescale 4` to run the simulation faster.
+`shots\run.ps1 -scene <name>` runs a scripted scene in the real game and saves a screenshot to `shots\`. The scenes are: drive, night, city, citynight, fly, flyover, top, map, mapall, auto, hyper, traffic, popup, park, signal, cityturn, citywall, padmenu, padmap, paddrive, onramp, offramp, citynav, airnav, show0 to show4. Add `-timescale 4` to run the simulation faster.
 
 ## Build the .exe
 

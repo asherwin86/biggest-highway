@@ -7,7 +7,9 @@ from ursina import Color, Entity, Text, application, camera, held_keys, time, wi
 from . import coords, save
 from .autopark import AutoPark
 from .controller import Pad, is_pad_key
+from . import ramps
 from .autopilot import Autopilot
+from .navigator import Navigator
 from .citylayout import lots_near
 from .config import (CITY_Y, DECK_Y, EARTH_LOOP_M, FOG_END, LANES, START_HOUR)
 from .destinations import Directory
@@ -21,6 +23,8 @@ from .world.traffic_view import TrafficView
 from .ui.dashboard import Dashboard
 from .ui.map_view import MapView
 from .ui.quick_menu import QuickMenu
+from .ui.update_prompt import UpdatePrompt
+from .updater import Updater, is_frozen
 
 HELP = """<white>BIGGEST HIGHWAY<default>   1,000,000 lanes around the whole Earth
 
@@ -31,8 +35,9 @@ T          full self-driving        M   map + search
 1 - 5      choose car  (5 = Volt Roadster, it flies)
 F          fly (Roadster)   Space / Ctrl   up / down
                fly down through the glass medians into the city
+City       green ENTRANCE ramps go up to the highway, EXIT ramps come down
 X          warp (up to 30,000 km/h)     C   camera
-P          Auto Park (or tap a P on the screen)    R  back to the highway deck
+P          Auto Park (or tap a P on the screen)    R  jump up to the highway deck
 H          hide screen    F1  this help
 """
 
@@ -64,12 +69,16 @@ class Game(Entity):
         self.autopilot = Autopilot()
         self.autopilot.cruise = data.get('cruise', 33.0)
         self.autopark = AutoPark()
+        self.navigator = Navigator(self.autopilot)
         self.daynight = DayNight(data.get('hour', START_HOUR))
 
         spec = CAR_BY_ID.get(data.get('car'), CARS[0])
         self.player = PlayerCar(spec)
-        start_x = coords.lane_center_x(500_000)
-        self.player.teleport(data.get('s', 150.0), data.get('x', start_x), data.get('alt', DECK_Y))
+        # a new game starts down in the city, on the street under a glass median,
+        # just before an ENTRANCE ramp up to the highway
+        start_x = ramps.nearest_median_x(coords.lane_center_x(500_000)) + 6.5
+        self.fresh_start = 's' not in data
+        self.player.teleport(data.get('s', 150.0), data.get('x', start_x), data.get('alt', CITY_Y))
         self.player.laps = data.get('laps', 0)
         self.player.odometer = data.get('odometer', 0.0)
         self.player.flying = spec.can_fly and data.get('flying', False)
@@ -115,7 +124,11 @@ class Game(Entity):
         self._shoulder_t = {}
         self.dashboard = Dashboard(self)
         self.map = MapView(self)
+        self.updater = Updater()
+        self.update_prompt = UpdatePrompt(self)
         self.menu = QuickMenu(self)
+        if (is_frozen() and not args.no_update_check and not args.shot) or args.check_update:
+            self.updater.check_async()
         self.toast_text = Text('', parent=camera.ui, position=(0.25, 0.42, -2), origin=(0, 0), scale=1.15)
         self.toast_t = 0.0
         self.help = Text(HELP, parent=camera.ui, position=(-0.86, 0.47, -2), origin=(-0.5, 0.5), scale=0.78,
@@ -135,7 +148,10 @@ class Game(Entity):
         self._apply_daynight(force=True)
         if args.shot:
             self.help.enabled = False
-        self.toast('Welcome to the biggest highway ever built', 4)
+        if self.fresh_start:
+            self.toast('Welcome! Explore the city. Green ENTRANCE ramps go up to the highway', 7)
+        else:
+            self.toast('Welcome back to the biggest highway ever built', 4)
         if self.pad.connected:
             self.pad.using_pad = True
             self.help.text = HELP_PAD
@@ -179,25 +195,21 @@ class Game(Entity):
     # ================================================================ actions
     def toggle_autopilot(self):
         ap = self.autopilot
-        if not ap.enabled and (self.player.flying or self.player.under_deck):
-            self.toast('Self-driving needs the highway deck')
-            return
         ap.enabled = not ap.enabled
         ap.target_lane = None
-        self.toast('Full self-driving ON' if ap.enabled else 'Self-driving off')
+        self.navigator.reset()
+        where = 'in the air' if self.player.flying else ('in the city' if self.player.under_deck else 'on the highway')
+        self.toast(f'Full self-driving ON ({where})' if ap.enabled else 'Self-driving off')
         if not ap.enabled:
             self.manual_target_x = coords.lane_center_x(self.player.lane)
 
     def set_destination(self, d):
         self.autopilot.set_destination(d)
+        self.navigator.reset()
         if d is None:
             self.toast('Route cleared')
             return
-        if not self.autopilot.enabled:
-            if self.player.flying or self.player.under_deck:
-                self.toast(f'Route set to {d.name}. Land on the deck and press T')
-                return
-            self.autopilot.enabled = True
+        self.autopilot.enabled = True
         self.toast(f'Navigating to {d.name}', 3)
 
     def jump_to(self, d):
@@ -258,6 +270,12 @@ class Game(Entity):
         self.help.text = HELP_PAD if self.pad.using_pad else HELP
         self.help.enabled = True
         self.help_t = 1e9
+
+    def finish_update(self):
+        """Called once the new exe is downloaded and verified: swap it in and restart."""
+        self.save()
+        if self.updater.install_and_restart():
+            application.quit()
 
     def _pad_changed(self, msg):
         self.toast(msg, 3)
@@ -372,6 +390,9 @@ class Game(Entity):
             self.pad.using_pad = True
         elif not key.endswith(' up') and 'mouse' not in key and 'scroll' not in key and key != 'escape':
             self.pad.using_pad = False
+        if self.update_prompt.is_open and key in ('gamepad a', 'gamepad b', 'enter', 'escape'):
+            self.update_prompt.handle(key)
+            return
         if self.menu.is_open:
             self.menu.handle(key)
             return
@@ -507,25 +528,24 @@ class Game(Entity):
     def _controls(self, dt):
         p = self.player
         ap = self.autopilot
-        if ap.enabled and (p.flying or p.under_deck):
-            ap.enabled = False
-            self.toast('Self-driving needs the highway deck')
         if ap.enabled:
             if not self.menus_open and (held_keys['s'] or held_keys['down arrow'] or self.pad.brake() > 0.3):
                 ap.enabled = False
                 self.manual_target_x = coords.lane_center_x(p.lane)
                 self.toast('Self-driving disengaged (brake)')
             else:
-                plan = ap.plan(dt, p, self.traffic.nearby(p, 220, 60, 3))
-                self.ap_status = plan.status
-                self.plan_lane = plan.path_lane
-                if plan.arrived:
-                    name = ap.destination.name if ap.destination else ''
-                    ap.set_destination(None)
-                    ap.enabled = False
-                    self.manual_target_x = p.x
-                    self.toast(f'You have arrived: {name}', 4)
-                return plan.controls
+                nav = self.navigator
+                ctrl = nav.step(dt, p, self.traffic.nearby(p, 220, 60, 3))
+                self.ap_status = nav.status
+                self.plan_lane = nav.plan_lane
+                while nav.events:
+                    kind, name = nav.events.pop(0)
+                    if kind == 'arrived':
+                        ap.enabled = False
+                        self.manual_target_x = None if p.under_deck else p.x
+                        self.toast(f'You have arrived: {name}', 4)
+                        self.pad.rumble(0.4, 0.2, 0.2)
+                return ctrl
         self.plan_lane = None
         if self.menus_open:
             return Controls(target_x=self.manual_target_x)
@@ -588,7 +608,9 @@ class Game(Entity):
         else:
             if park.state == 'parked':
                 park.state = 'idle'
-            p.update(dt, self._controls(dt))
+            ctrl = self._controls(dt)
+            if ctrl is not None:              # None: self-driving already moved the car (city / air routes)
+                p.update(dt, ctrl)
         while p.events:
             ev = p.events.pop()
             if ev == 'wall':
@@ -638,6 +660,7 @@ class Game(Entity):
 
         self.dashboard.update(dt)
         self.map.update(dt, self._clock)
+        self.update_prompt.update(dt)
         if self.toast_t > 0:
             self.toast_t -= dt
             self.toast_text.color = Color(1, 1, 1, max(0.0, min(1.0, self.toast_t * 2)))
@@ -822,6 +845,25 @@ class Game(Entity):
             held_keys['gamepad left stick x'] = 0.6
             held_keys['gamepad right stick x'] = -0.7
             self.input('gamepad right shoulder')
+        if sc in ('onramp', 'citynav', 'airnav', 'offramp'):
+            self.help.enabled = False
+            mx = ramps.nearest_median_x(coords.lane_center_x(500_000))
+            if sc == 'onramp':                     # FSD from the city to a highway destination
+                p.teleport(150, mx + 6.5, CITY_Y)
+                self.set_destination(self.directory.search('orbit diner')[0])
+            elif sc == 'offramp':                  # FSD from the highway to a city destination
+                p.teleport(11_000, coords.lane_center_x(500_000), DECK_Y)
+                self.set_destination(self.directory.search('neon district')[0])
+            elif sc == 'citynav':
+                p.teleport(150, mx + 6.5, CITY_Y)
+                self.set_destination(self.directory.search('old town market')[0])
+            else:
+                self.select_car(4)
+                p.flying = True
+                for t in self.thrusters:
+                    t.enabled = True
+                p.teleport(150, mx + 6.5, CITY_Y + 5)
+                self.set_destination(self.directory.search('glass median overlook')[0])
         if sc == 'traffic':
             self.density.auto = False
             self.density.manual = 1.0
