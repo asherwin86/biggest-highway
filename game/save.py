@@ -10,7 +10,12 @@ from pathlib import Path
 
 from .config import CITY_Y, EARTH_LOOP_M, MAX_ALT
 
-if getattr(sys, 'frozen', False):          # running as the built .exe: save next to it
+from .device import IS_ANDROID
+
+if IS_ANDROID:                             # the app's private storage
+    from .device import android_data_dir
+    SAVE_PATH = android_data_dir() / 'files' / 'save.json'
+elif getattr(sys, 'frozen', False):        # running as the built .exe: save next to it
     SAVE_PATH = Path(sys.executable).resolve().parent / 'save.json'
 else:
     SAVE_PATH = Path(__file__).resolve().parents[1] / 'save.json'

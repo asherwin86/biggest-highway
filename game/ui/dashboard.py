@@ -5,7 +5,7 @@ import math
 
 from ursina import Button, Color, Entity, Mesh, Quad, Slider, Text, camera, color
 
-from .. import coords
+from .. import coords, device
 from ..citylayout import CX, CZ, EW_STREETS, NS_STREETS, X_ORIGIN, chunk_origin_x, lots_near
 from .. import ramps
 from ..config import LANES
@@ -201,7 +201,7 @@ class Dashboard:
             self.ap_status.text = f'Self-driving: {g.ap_status}'
             self.ap_status.color = ACCENT
         else:
-            self.ap_status.text = 'Self-driving off  (T)'
+            self.ap_status.text = 'Self-driving off' + ('' if device.TOUCH else '  (T)')
             self.ap_status.color = DIM
         mode = []
         if p.flying:
@@ -232,7 +232,8 @@ class Dashboard:
                           f'Lap {p.laps}   Odo {p.odometer / 1000:,.0f} km')
         dest = ap.destination
         if dest is None:
-            self.nav.text = 'No destination. Press M to search the map.'
+            self.nav.text = ('No destination. Tap Map to search.' if device.TOUCH
+                             else 'No destination. Press M to search the map.')
         else:
             d = g.directory.distance(p.s, p.x, dest)
             lanes = dest.lane - p.lane if not dest.space else 0
@@ -249,12 +250,15 @@ class Dashboard:
         self.buttons['Warp'].color = ACCENT if p.warp else BTN
         if g.pad.using_pad:
             self.footer.text = 'A self-drive  B park  LB/RB signal  Start map  Back menu'
+        elif device.TOUCH:
+            self.footer.text = f'Camera: {g.camera_mode}   Signal L/R changes lane   Menu: everything else'
         else:
             self.footer.text = f'Camera: {g.camera_mode}   Q/E signal   P parking   Esc menu   F1 help'
 
         if park.active and self.popup.enabled:
             self.pop_title.text = park.lot.name if park.lot else 'Auto Park'
-            self.pop_text.text = f'{park.status.replace("Auto Park: ", "")}\nBrake (S) or Cancel to stop'
+            stop = 'Pull the stick down' if device.TOUCH else 'Brake (S)'
+            self.pop_text.text = f'{park.status.replace("Auto Park: ", "")}\n{stop} or Cancel to stop'
             self.pop_go.enabled = False
             self.pop_x.text = 'Cancel  (B)' if g.pad.using_pad else 'Cancel'
 

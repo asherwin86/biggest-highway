@@ -1,0 +1,5 @@
+# Panda3D for Android (downloaded by android/build_apk.ps1 into build-android/wheels).
+# Everything else the game needs is pure Python and is taken from .venv-android.
+--no-index
+--find-links build-android/wheels
+panda3d==1.11.0

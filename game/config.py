@@ -1,4 +1,5 @@
 """Game-wide constants. Pure Python, no engine imports."""
+from .device import IS_ANDROID
 
 # --- The highway -----------------------------------------------------------
 EARTH_LOOP_M = 40_075_000.0      # one lap around the Earth (metres)
@@ -46,3 +47,12 @@ START_HOUR = 16.5
 HYPER_SPEED = 8_333.0            # m/s (30,000 km/h) for autopilot hyper mode
 EXPRESS_LATERAL = 120_000.0      # m/s max lateral "lane express" speed
 GHOST_SPEED = 140.0              # above this speed traffic/collisions are skipped
+
+# --- Phones: draw a bit less so it runs smoothly ---------------------------
+if IS_ANDROID:
+    BANDS_EACH_SIDE = 2
+    CITY_RADIUS_X = 2
+    CITY_AHEAD = 4
+    CITY_CACHE = 160
+    MAX_TRAFFIC = 70
+    TRAFFIC_LANES_EACH_SIDE = 12

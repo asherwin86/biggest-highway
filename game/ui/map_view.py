@@ -5,7 +5,7 @@ import math
 from ursina import (Button, Circle, Color, Entity, InputField, Mesh, Quad, Text,
                     camera, color, held_keys, mouse)
 
-from .. import coords
+from .. import coords, device
 from .osk import OnScreenKeyboard
 from ..config import EARTH_R, MAP_SIZE_M
 
@@ -109,6 +109,9 @@ class MapView:
         self.pad_hint = Text('', parent=r, position=(ACX, MY0 - 0.025, -0.05), scale=0.66, color=DIM,
                              origin=(0, 0))
         self.osk = OnScreenKeyboard(r, (ACX, ACY - 0.16, -0.08))
+        if device.TOUCH:                     # finger-sized keys
+            self.osk.root.scale = 1.45
+            self.osk.root.y = ACY - 0.1
         self.focus = 'results'
         self.hl = 0
         self._aim = None
@@ -137,7 +140,7 @@ class MapView:
         if self.selected is None and self.g.autopilot.destination is not None:
             self._select(self.g.autopilot.destination, recenter=False)
         self.center_me()
-        self.search.active = not self.g.pad.using_pad
+        self.search.active = not self.g.pad.using_pad and not device.TOUCH
         self.focus, self.hl = 'results', 0
         self.g.pad.reset_nav()
         self._q = self._pending = self.search.text
@@ -181,7 +184,8 @@ class MapView:
         self.jump_btn.enabled = has and d.reachable
         if not has:
             self.sel_name.text = ''
-            self.sel_info.text = 'Pick a result or a pin on the map.\nScroll to zoom, drag to pan.'
+            how = '+ / - to zoom' if device.TOUCH else 'Scroll to zoom'
+            self.sel_info.text = f'Pick a result or a pin on the map.\n{how}, drag to pan.'
             return
         p = self.g.player
         dist = self.g.directory.distance(p.s, p.x, d)
@@ -303,6 +307,11 @@ class MapView:
         else:
             self._drag = None
 
+        # touch screens have no keyboard: tapping the search box opens the on-screen one
+        if device.TOUCH and self.search.active and not self.osk.is_open:
+            self.search.active = False
+            self.osk.open(self.search, touch=True)
+
         # search (debounced: matching 1,500+ names takes a moment)
         q = self.search.text
         if q != self._pending:
@@ -320,6 +329,8 @@ class MapView:
         if pad:
             self.pad_hint.text = ('LS pan  LT/RT zoom  D-pad results  A select  X navigate  Y jump  '
                                   'LB search  RB me  R3 all  B close')
+        elif device.TOUCH:
+            self.pad_hint.text = 'Drag to pan   + / - zoom   tap the search box to type   tap a pin or result'
         else:
             self.pad_hint.text = 'Scroll zoom   drag pan   type to search   Enter pick first result   Esc close'
         self._draw()

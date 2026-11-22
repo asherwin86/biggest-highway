@@ -14,6 +14,15 @@ __pycache__/
 build/
 dist/
 
+# Android build (android/build_apk.ps1): its Python, downloads, bundles and signing keys
+.venv-android/
+build-android/
+*.apk
+*.apks
+*.aab
+*.keystore
+*.jks
+
 # Local test screenshots and logs (README images live in docs/)
 shots/*
 !shots/run.ps1

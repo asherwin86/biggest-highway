@@ -2,7 +2,7 @@
 
 **Drive a 1,000,000-lane highway that wraps around the whole Earth.**
 
-A 3D driving game written in Python ([Ursina](https://www.ursinaengine.org/) on [Panda3D](https://www.panda3d.org/)), with car models built in [Blender](https://www.blender.org/). It's a full **open world**: you start in an endless city, explore, then take a ramp up and merge onto the highway. Self-driving works on the streets, on the highway and in the air. There's also Auto Park, a flying roadster, full controller support, a map 1,000,000,000 km wide, and an auto-updater in the exe.
+A 3D driving game written in Python ([Ursina](https://www.ursinaengine.org/) on [Panda3D](https://www.panda3d.org/)), with car models built in [Blender](https://www.blender.org/). It's a full **open world**: you start in an endless city, explore, then take a ramp up and merge onto the highway. Self-driving works on the streets, on the highway and in the air. There's also Auto Park, a flying roadster, full controller support, a map 1,000,000,000 km wide, an auto-updater in the exe, and an **Android app** with touch controls.
 
 ![Self-driving on the highway, with the EV-style touchscreen](docs/screenshots/hero.png)
 
@@ -70,6 +70,25 @@ Grab `BiggestHighway.exe` from the [Releases](../../releases) page. It's a singl
 
 If anything fails, nothing is changed. You can also check by hand from the menu (Esc / Back, then **Check for updates**), or start the exe with `--no-update-check` to turn the check off. The check is a single anonymous request to the public GitHub API. v1.0 has no updater, so get v1.1 by hand once.
 
+## Android (experimental)
+
+The same game runs on Android phones and tablets (Android 5.0 or later), packaged with Panda3D 1.11's Android support.
+
+![The Android touch layout](docs/screenshots/android.png)
+
+**Install:** on your phone, download `BiggestHighway.apk` from a release on the [Releases](../../releases) page that includes it (or [build it yourself](#build-the-android-app)) and open it. Android asks you to allow installs from your browser or file manager the first time. The game runs in landscape.
+
+**Touch controls:**
+- **Stick** (right side): drag up to drive, down to brake (hold to reverse), sideways to steer. Android only reports one finger at a time, so everything is on one stick.
+- **Menu, Map, Self-drive, Park, Fly** (left side). **Up / Down** buttons appear while you fly.
+- The **car's screen** works like on PC: tap Signal L / R, cruise speed, the car, warp, camera, or a **P** on the parking map.
+- The **map search** opens an on-screen keyboard when you tap the search box.
+- In the **menu**, tap the left half of a `[ value ]` row to lower it and the right half to raise it.
+
+Saves go to the app's private storage. The Android app doesn't update itself like the exe: to update, install the new APK over the old one. Your save is kept, because every APK is signed with the same key.
+
+This is an early version. Its touch controls are tested in the PC game (`--touch`), but it hasn't been tested on real phones yet. If it doesn't start on your phone, please open an issue and include the output of `adb logcat -s Panda3D python.stdout python.stderr`.
+
 ## Run from source
 
 Needs Python 3.13 (Panda3D doesn't ship wheels for 3.14 yet).
@@ -105,6 +124,8 @@ Add `--fresh` to start at kilometre 0 and ignore your save.
 | Esc | Back | menu with every option |
 | F1 | (menu) | help |
 
+Add `--touch` to try the Android touch controls on PC (the mouse acts as your finger).
+
 **Controllers:** any XInput controller works, and PlayStation pads work through Steam or DS4Windows. You can plug one in while the game is running. The on-screen hints switch to controller buttons, and it rumbles on bumps, laps and parking.
 
 On the map, the left stick pans (a crosshair picks pins) and LT / RT zoom. The D-pad picks a result, A selects it, X navigates there and Y jumps there. LB opens an on-screen keyboard for search.
@@ -130,11 +151,13 @@ game/
   citylayout.py          streets, blocks and parking spaces (shared by everything)
   destinations.py        destinations + fuzzy search
   controller.py          gamepad support
+  device.py              PC or Android: touch mode, app storage, unpacking files from the APK
   save.py                save / load (validated)
   world/                 highway, city, traffic and car rendering
-  ui/                    dashboard, 3D view, map, menu, on-screen keyboard
+  ui/                    dashboard, 3D view, map, menu, on-screen keyboard, touch controls
 blender/make_cars.py     builds the car models
 assets/models/*.glb      exported car models
+setup.py, android/       Android build (Panda3D build_apps) and its build script
 tests/                   logic tests (no window needed)
 ```
 
@@ -163,7 +186,7 @@ These cover:
 - city steering and walls
 - map search, loading broken saves, and the updater's version and checksum checks
 
-`shots\run.ps1 -scene <name>` runs a scripted scene in the real game and saves a screenshot to `shots\`. The scenes are: drive, night, city, citynight, fly, flyover, top, map, mapall, auto, hyper, traffic, popup, park, signal, cityturn, citywall, padmenu, padmap, paddrive, onramp, offramp, citynav, airnav, show0 to show4. Add `-timescale 4` to run the simulation faster.
+`shots\run.ps1 -scene <name>` runs a scripted scene in the real game and saves a screenshot to `shots\`. The scenes are: drive, night, city, citynight, fly, flyover, top, map, mapall, auto, hyper, traffic, popup, park, signal, cityturn, citywall, padmenu, padmap, paddrive, onramp, offramp, citynav, airnav, touch, touchmap, touchmenu, show0 to show4. Add `-timescale 4` to run the simulation faster.
 
 ## Build the .exe
 
@@ -174,9 +197,27 @@ These cover:
 
 This makes `dist\BiggestHighway.exe`. Set `ONEDIR=1` before building to get a folder version that starts faster.
 
+## Build the Android app
+
+Needs Python 3.13 and Java 17 or newer. No Android SDK is needed.
+
+```powershell
+powershell -ExecutionPolicy Bypass -File android\build_apk.ps1
+```
+
+This makes `dist\BiggestHighway.apk`, a single APK for ARM (64- and 32-bit) and x86_64 devices, plus a Play Store bundle (`.aab`) in `build-android\dist`. The script:
+1. downloads Panda3D 1.11 (a development build, the first version that can build Android apps) for Windows and for Android, and Google's bundletool, checking each file's SHA-256,
+2. sets up a separate `.venv-android` with Ursina but without Pillow (which doesn't exist for Android),
+3. runs `setup.py bdist_apps`, which packs the game, Ursina's fonts and textures and the car models into an Android App Bundle,
+4. turns that into one APK with bundletool and signs it.
+
+The signing key is made on the first build and kept in `%USERPROFILE%\.android\biggest-highway.keystore`, outside the repo. **Keep it:** Android only installs an update over an app signed with the same key. Set `BH_KEYSTORE` and `BH_KEYSTORE_PASS` to use a different key.
+
+On the phone the game copies its files out of the APK to the app's storage on the first start (and after each update), because Ursina loads models and textures from normal files.
+
 ## Saves
 
-Progress is saved every few seconds to `save.json` (next to the exe, or in the project folder when run from source). It's git-ignored, so everyone keeps their own. The game checks every value when loading. A missing, old, edited or broken save just falls back to defaults and can't crash the game.
+Progress is saved every few seconds to `save.json` (next to the exe, in the project folder when run from source, or in the app's storage on Android). It's git-ignored, so everyone keeps their own. The game checks every value when loading. A missing, old, edited or broken save just falls back to defaults and can't crash the game.
 
 ## License
 

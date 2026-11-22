@@ -3,7 +3,9 @@ the game is reachable from here with just a D-pad and A, so a controller can
 do everything a keyboard and mouse can."""
 from ursina import Button, Color, Entity, Quad, Text, application, camera, color
 
-from .. import coords
+from ursina import mouse
+
+from .. import coords, device
 from ..vehicles import CARS
 from ..version import VERSION
 
@@ -59,7 +61,9 @@ class QuickMenu:
             (lambda: 'Map and search', self._then(g.toggle_map), None),
             (lambda: f'Screen: {"shown" if g.dashboard.root.enabled else "hidden"}', g.dashboard.toggle, None),
             (lambda: 'Controls help', self._then(g.show_help), None),
+        ] + ([] if device.IS_ANDROID else [
             (lambda: f'Check for updates  (you have v{VERSION})', self._then(lambda: g.update_prompt.check_now()), None),
+        ]) + [
             (lambda: 'Quit game  (press again to confirm)' if self.confirm_quit else 'Quit game', self._quit, None),
         ]
 
@@ -104,6 +108,13 @@ class QuickMenu:
 
     def _click(self, i):
         self.i = i
+        _, act, adj = self.items[i]
+        if act is None and adj is not None:
+            # [ value ] rows: tap the left half to lower it, the right half to raise it
+            self.confirm_quit = False
+            adj(-1 if mouse.x < self.rows[i].getX(camera.ui) else 1)
+            self.refresh()
+            return
         self.select()
 
     def select(self):
@@ -160,5 +171,9 @@ class QuickMenu:
             b.text_entity.x = -0.47
             b.color = ACCENT if i == self.i else ROW
         pad = self.g.pad.using_pad
-        self.hint.text = ('D-pad move   left/right adjust   A select   B close' if pad
-                          else 'Arrows move   left/right adjust   Enter select   Esc close')
+        if pad:
+            self.hint.text = 'D-pad move   left/right adjust   A select   B close'
+        elif device.TOUCH:
+            self.hint.text = 'Tap a row.  [ value ] rows: tap the left half to lower, right half to raise'
+        else:
+            self.hint.text = 'Arrows move   left/right adjust   Enter select   Esc close'

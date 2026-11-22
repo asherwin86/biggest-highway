@@ -4,7 +4,7 @@ import random
 
 from ursina import Color, Entity, Text, application, camera, held_keys, time, window
 
-from . import coords, save
+from . import coords, device, save
 from .autopark import AutoPark
 from .controller import Pad, is_pad_key
 from . import ramps
@@ -23,6 +23,7 @@ from .world.traffic_view import TrafficView
 from .ui.dashboard import Dashboard
 from .ui.map_view import MapView
 from .ui.quick_menu import QuickMenu
+from .ui.touch import HELP_TOUCH, TouchControls, install_tap_fix
 from .ui.update_prompt import UpdatePrompt
 from .updater import Updater, is_frozen
 
@@ -127,11 +128,17 @@ class Game(Entity):
         self.updater = Updater()
         self.update_prompt = UpdatePrompt(self)
         self.menu = QuickMenu(self)
-        if (is_frozen() and not args.no_update_check and not args.shot) or args.check_update:
+        self.touch = None
+        if device.TOUCH:
+            install_tap_fix()
+            self.touch = TouchControls(self)
+        # the .exe updates itself from GitHub; the Android app is updated by installing a new APK
+        if not device.IS_ANDROID and ((is_frozen() and not args.no_update_check and not args.shot)
+                                      or args.check_update):
             self.updater.check_async()
         self.toast_text = Text('', parent=camera.ui, position=(0.25, 0.42, -2), origin=(0, 0), scale=1.15)
         self.toast_t = 0.0
-        self.help = Text(HELP, parent=camera.ui, position=(-0.86, 0.47, -2), origin=(-0.5, 0.5), scale=0.78,
+        self.help = Text(HELP_TOUCH if device.TOUCH else HELP, parent=camera.ui, position=(-0.86, 0.47, -2), origin=(-0.5, 0.5), scale=0.78,
                          background=True)
         self.help_t = 14.0
         self.flash = Entity(parent=camera.ui, model='quad', scale=(4, 2), color=Color(1, 1, 1, 0), z=-3)
@@ -256,7 +263,8 @@ class Game(Entity):
             self.autopilot.enabled = False
         for t in self.thrusters:
             t.enabled = p.flying
-        self.toast('Flight mode: Space up, Ctrl down' if p.flying else 'Landing...')
+        how = 'use the Up / Down buttons' if self.touch else 'Space up, Ctrl down'
+        self.toast(f'Flight mode: {how}' if p.flying else 'Landing...')
 
     def toggle_warp(self):
         p = self.player
@@ -267,7 +275,7 @@ class Game(Entity):
         self.cam_i = (self.cam_i + d) % len(CAMERAS)
 
     def show_help(self):
-        self.help.text = HELP_PAD if self.pad.using_pad else HELP
+        self.help.text = HELP_PAD if self.pad.using_pad else (HELP_TOUCH if self.touch else HELP)
         self.help.enabled = True
         self.help_t = 1e9
 
@@ -520,6 +528,9 @@ class Game(Entity):
             else:
                 self._shoulder_t.pop(d, None)
 
+    def _touch_brake(self):
+        return self.touch is not None and self.touch.brake() > 0.3
+
     @property
     def menus_open(self):
         return self.map.is_open or self.menu.is_open
@@ -529,7 +540,8 @@ class Game(Entity):
         p = self.player
         ap = self.autopilot
         if ap.enabled:
-            if not self.menus_open and (held_keys['s'] or held_keys['down arrow'] or self.pad.brake() > 0.3):
+            if not self.menus_open and (held_keys['s'] or held_keys['down arrow'] or self.pad.brake() > 0.3
+                                        or self._touch_brake()):
                 ap.enabled = False
                 self.manual_target_x = coords.lane_center_x(p.lane)
                 self.toast('Self-driving disengaged (brake)')
@@ -551,15 +563,18 @@ class Game(Entity):
             return Controls(target_x=self.manual_target_x)
         k = held_keys
         pad = self.pad
+        t = self.touch
         steer = (k['d'] or k['right arrow']) - (k['a'] or k['left arrow'])
         if not steer:
             steer = pad.steer()
+        if not steer and t:
+            steer = t.steer()
         _, ry = pad.right_stick()
-        c = Controls(throttle=max(float(k['w'] or k['up arrow']), pad.throttle()),
-                     brake=max(float(k['s'] or k['down arrow']), pad.brake()),
-                     steer=float(steer), up=max(float(k['space']), ry if p.flying else 0.0),
+        c = Controls(throttle=max(float(k['w'] or k['up arrow']), pad.throttle(), t.throttle() if t else 0.0),
+                     brake=max(float(k['s'] or k['down arrow']), pad.brake(), t.brake() if t else 0.0),
+                     steer=float(steer), up=max(float(k['space']), ry if p.flying else 0.0, t.up() if t else 0.0),
                      down=max(float(k['left control'] or k['right control'] or k['control']),
-                              -ry if p.flying else 0.0))
+                              -ry if p.flying else 0.0, t.down() if t else 0.0))
         if steer:
             self.manual_target_x = None
         elif self.manual_target_x is None and not p.flying and not p.under_deck:
@@ -576,6 +591,13 @@ class Game(Entity):
         self.frame += 1
         p = self.player
         self._scripted_setup()
+        if self.args.scene == 'touch' and self.touch and self.frame > 2:   # a finger on the stick
+            self.touch.fake = (0.12, 0.9)
+        if self.args.scene == 'touchmenu' and self.touch:        # finger taps: Self-drive, then Menu
+            if self.frame == 20:
+                self._test_tap(self.touch.buttons['Self-drive'])
+            elif self.frame == 50:
+                self._test_tap(self.touch.buttons['Menu'])
         if self.args.scene == 'cityturn' and self.frame > 2:     # turn right at the intersection
             near = coords.delta_s(p.s, 400.0) < 7
             held_keys['w'] = 0.0 if near and p.yaw < 80 else 1.0
@@ -587,12 +609,15 @@ class Game(Entity):
         park = self.autopark
         k = held_keys
         self._pad_frame(dt)
+        if self.touch:
+            self.touch.update()
         pad = self.pad
         driver_input = not self.menus_open and (
             any(k[x] for x in ('w', 's', 'a', 'd', 'up arrow', 'down arrow'))
-            or pad.throttle() > 0.2 or pad.brake() > 0.2 or abs(pad.steer()) > 0.3)
+            or pad.throttle() > 0.2 or pad.brake() > 0.2 or abs(pad.steer()) > 0.3
+            or (self.touch is not None and self.touch.active))
         if park.active:
-            if not self.menus_open and (k['s'] or k['down arrow'] or pad.brake() > 0.3):
+            if not self.menus_open and (k['s'] or k['down arrow'] or pad.brake() > 0.3 or self._touch_brake()):
                 self.cancel_autopark()
             else:
                 ev = park.update(dt, p)
@@ -864,10 +889,41 @@ class Game(Entity):
                     t.enabled = True
                 p.teleport(150, mx + 6.5, CITY_Y + 5)
                 self.set_destination(self.directory.search('glass median overlook')[0])
+        if sc in ('touch', 'touchmenu', 'touchmap'):
+            self.help.enabled = False
+            p.speed = 12
+        if sc == 'touchmap':
+            self.map.open()
+            self.map.search.active = True          # same as tapping the search box
         if sc == 'traffic':
             self.density.auto = False
             self.density.manual = 1.0
             self.density.value = 1.0
+
+    def _test_tap(self, ent):
+        """Tap a UI entity like a finger does: the pointer jumps there and presses in
+        the same frame. (A test window can't own the real cursor, so the pointer is faked.)"""
+        from ursina import application as app_mod
+        from ursina import mouse
+        M = type(mouse)
+        if not hasattr(M, '_real_x'):
+            M._real_x, M._real_y = M.x, M.y
+            M.x = property(lambda s: s._fake[0] if getattr(s, '_fake', None) else M._real_x.fget(s), M._real_x.fset)
+            M.y = property(lambda s: s._fake[1] if getattr(s, '_fake', None) else M._real_y.fget(s), M._real_y.fset)
+            real = mouse._mouse_watcher
+
+            class Watcher:
+                def has_mouse(self):
+                    return True
+                hasMouse = has_mouse
+
+                def __getattr__(self, name):
+                    return getattr(real, name)
+            mouse._mouse_watcher = Watcher()
+        pos = ent.getPos(camera.ui)
+        mouse._fake = (pos[0], pos[1])
+        app_mod.base.messenger.send('buttonDown', ['mouse1'])
+        app_mod.base.messenger.send('buttonUp', ['mouse1'])
 
     def _scripted_capture(self):
         a = self.args

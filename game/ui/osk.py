@@ -15,8 +15,8 @@ class OnScreenKeyboard:
         h = KH * 5 + 0.07
         Entity(parent=self.root, model=Quad(radius=0.012, aspect=w / h), scale=(w, h),
                color=Color(0.07, 0.08, 0.1, 0.98), z=0.01)
-        Text('A type   X delete   Y space   B done', parent=self.root, position=(0, h / 2 - 0.022, -0.01),
-             scale=0.62, origin=(0, 0), color=Color(0.6, 0.63, 0.68, 1))
+        self.hint = Text('A type   X delete   Y space   B done', parent=self.root, position=(0, h / 2 - 0.022, -0.01),
+                         scale=0.62, origin=(0, 0), color=Color(0.6, 0.63, 0.68, 1))
         self.grid = []
         y0 = h / 2 - 0.065
         for r, row in enumerate(ROWS):
@@ -43,9 +43,10 @@ class OnScreenKeyboard:
     def is_open(self):
         return self.root.enabled
 
-    def open(self, field):
+    def open(self, field, touch=False):
         self.field = field
         self.root.enabled = True
+        self.hint.text = 'Tap the keys, then DONE' if touch else 'A type   X delete   Y space   B done'
         self.r, self.c = 1, 0
         self._highlight()
 

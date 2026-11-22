@@ -3,7 +3,8 @@ around the player (floating origin) and recycled every frame."""
 import math
 import random
 
-from PIL import Image, ImageDraw
+from panda3d.core import PNMImage
+from panda3d.core import Texture as PandaTexture
 from ursina import Color, Entity, Text, Texture, Vec2, color
 
 from .. import coords
@@ -22,32 +23,43 @@ GANTRY_STEP = 1000.0
 SLOTS = BANDS_EACH_SIDE * 2 + 1
 
 
+# Textures are drawn with Panda's own PNMImage (no Pillow, so this also runs on Android).
+def _rect(img, x0, y0, x1, y1, rgb):
+    c = tuple(v / 255 for v in rgb)
+    for y in range(y0, y1 + 1):
+        for x in range(x0, x1 + 1):
+            img.setXel(x, y, *c)
+
+
+def _to_texture(img, name):
+    t = PandaTexture(name)
+    t.load(img)
+    return Texture(t)
+
+
 def lane_texture():
     w, h = 64, 192
     rng = random.Random(7)
-    img = Image.new('RGB', (w, h), (52, 54, 58))
-    px = img.load()
+    img = PNMImage(w, h, 3)
     for y in range(h):
         for x in range(w):
             n = rng.randint(-6, 6)
-            r, g, b = px[x, y]
-            px[x, y] = (r + n, g + n, b + n)
-    d = ImageDraw.Draw(img)
-    d.rectangle([0, 0, 2, h // 4], fill=(235, 235, 230))         # dashed lane divider
-    d.rectangle([w // 2 - 6, 0, w // 2 + 6, h], fill=(48, 50, 54))  # slightly darker tyre track
-    tex = Texture(img)
+            img.setXel(x, y, (52 + n) / 255, (54 + n) / 255, (58 + n) / 255)
+    _rect(img, 0, 0, 2, h // 4, (235, 235, 230))                  # dashed lane divider
+    _rect(img, w // 2 - 6, 0, w // 2 + 6, h - 1, (48, 50, 54))    # slightly darker tyre track
+    tex = _to_texture(img, 'lane')
     tex.filtering = 'mipmap'
     return tex
 
 
 def checker_texture():
-    img = Image.new('RGB', (64, 8), (255, 255, 255))
-    d = ImageDraw.Draw(img)
+    img = PNMImage(64, 8, 3)
+    img.fill(1, 1, 1)
     for i in range(16):
         for j in range(2):
             if (i + j) % 2 == 0:
-                d.rectangle([i * 4, j * 4, i * 4 + 3, j * 4 + 3], fill=(20, 20, 20))
-    return Texture(img)
+                _rect(img, i * 4, j * 4, i * 4 + 3, j * 4 + 3, (20, 20, 20))
+    return _to_texture(img, 'checker')
 
 
 def _structure_mesh(width):

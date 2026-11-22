@@ -4,9 +4,13 @@ from pathlib import Path
 
 from ursina import Entity, load_model
 
+from .. import device
 from .meshkit import MeshKit
 
-MODELS_DIR = Path(__file__).resolve().parents[2] / 'assets' / 'models'
+if device.IS_ANDROID:       # the game's files were copied out of the APK to the current folder
+    MODELS_DIR = Path.cwd() / 'assets' / 'models'
+else:
+    MODELS_DIR = Path(__file__).resolve().parents[2] / 'assets' / 'models'
 GLASS = (0.08, 0.1, 0.13, 1)
 TYRE = (0.06, 0.06, 0.07, 1)
 RIM = (0.55, 0.57, 0.6, 1)

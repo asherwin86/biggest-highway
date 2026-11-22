@@ -56,7 +56,11 @@ class Pad:
     def _refresh(self):
         from panda3d.core import InputDevice
         base = application.base
-        input_handler.gamepads = base.devices.getDevices(InputDevice.DeviceClass.gamepad)
+        try:
+            input_handler.gamepads = base.devices.getDevices(InputDevice.DeviceClass.gamepad)
+        except Exception as e:          # e.g. a platform without controller support
+            print('no controller support:', e)
+            input_handler.gamepads = []
         try:
             from ursina import gamepad as ursina_gamepad
             ursina_gamepad.connect_all()
