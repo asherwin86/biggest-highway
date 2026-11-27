@@ -6,6 +6,9 @@
 # into build-android\ (git-ignored) and checked against known SHA-256 hashes.
 # The APK is signed with a key kept outside the repo, in %USERPROFILE%\.android\.
 # Keep that file: Android only installs an update over an app signed with the same key.
+#
+# For testing:  $env:BH_ABIS='x86_64'   builds for the emulator only (quicker, smaller)
+#               $env:BH_DEBUGGABLE='1'  more graphics logging, and lets `adb run-as` look inside
 param([switch]$Clean)
 # Not 'Stop': Windows PowerShell 5.1 would treat warnings that pip, keytool or the
 # build print on stderr as fatal. Each step checks its exit code instead.
@@ -33,10 +36,10 @@ function Get-Checked($url, $path, $sha) {
 }
 
 # --- 1. Panda3D 1.11 (the first version that can build Android apps) --------------
-$commit = '418d041252ab55850258012399bc63938552f65b'
-$hostWhl = 'panda3d-1.11.0.dev3823-cp313-cp313-win_amd64.whl'
+$commit = 'c32d5146b330c934d6c80024e91e0b8658e4fd72'   # 26 Nov 2025: same Android startup code as the wheels below
+$hostWhl = 'panda3d-1.11.0.dev3849-cp313-cp313-win_amd64.whl'
 Get-Checked "https://buildbot.panda3d.org/downloads/$commit/$hostWhl" (Join-Path $work $hostWhl) `
-    '4144044bdd061a97b7b9f32cb622b6b762155b25a837f34cfbf3b9abcef7244a'
+    '5a7366645ff7eb41e06f1976ceaab32f5574589e8df5fa1dd4aca4b16082edd6'
 $android = @{
     'arm64'  = '7c72074c16224c1a9f3de8bdca10388ef5d573ae9b8bf368588d4bea1319fc03'
     'armv7a' = 'a414a0056d8ca03417a52fda36f0211d95485ade90bc2abc92af9c2d24e94d3b'

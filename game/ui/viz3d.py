@@ -8,7 +8,7 @@ import math
 
 from panda3d.core import (Camera, FrameBufferProperties, NodePath, PerspectiveLens, Point3,
                           TransparencyAttrib, Vec4)
-from ursina import Entity, Mesh, Texture, application
+from ursina import Entity, Mesh, Texture, Vec2, application
 
 from .. import coords
 from ..citylayout import CX, CZ, EW_STREETS, NS_STREETS, SPOT_DEPTH, SPOT_PITCH, chunk_of, chunk_origin_x, lots_near
@@ -72,6 +72,18 @@ class FSDView:
         self.buffer.setClearColor(Vec4(0.07, 0.08, 0.1, 1))
         self.root = NodePath('fsd-root')
         self.root.setTransparency(TransparencyAttrib.MAlpha)
+        from .. import device
+        if device.IS_ANDROID:
+            # OpenGL ES has no fixed-function drawing: this separate scene needs a shader too
+            from ursina.shaders import unlit_shader
+            if not unlit_shader.compiled:
+                unlit_shader.compile()
+            self.root.setShader(unlit_shader._shader)
+            self.root.setShaderInput('texture_scale', Vec2(1, 1))
+            self.root.setShaderInput('texture_offset', Vec2(0, 0))
+            for k, v in getattr(unlit_shader, 'default_input', {}).items():
+                self.root.setShaderInput(k, v)
+            self.root.setTexture(device.white_texture())
         lens = PerspectiveLens()
         lens.setFov(50)
         lens.setAspectRatio(res[0] / res[1])

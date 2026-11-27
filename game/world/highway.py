@@ -7,7 +7,7 @@ from panda3d.core import PNMImage
 from panda3d.core import Texture as PandaTexture
 from ursina import Color, Entity, Text, Texture, Vec2, color
 
-from .. import coords
+from .. import coords, device
 from ..config import (BAND_LANES, BAND_PERIOD, BAND_W, BANDS_EACH_SIDE, CITY_Y,
                       DECK_AHEAD, DECK_BEHIND, DECK_THICK, GAP_W, LANE_W, NUM_BANDS)
 from ..citylayout import PILLAR_BAND_X
@@ -32,6 +32,9 @@ def _rect(img, x0, y0, x1, y1, rgb):
 
 
 def _to_texture(img, name):
+    if device.IS_ANDROID:
+        # grey anyway; one channel avoids BGRA uploads, which some OpenGL ES drivers draw black
+        img.makeGrayscale()
     t = PandaTexture(name)
     t.load(img)
     return Texture(t)

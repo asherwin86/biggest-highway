@@ -589,6 +589,11 @@ class Game(Entity):
         dt = min(time.dt, 0.05) * self.args.timescale
         self._clock += dt
         self.frame += 1
+        if device.IS_ANDROID and self.frame in (20, 90, 300) and device.refresh_touch_offset() and self.touch:
+            self.touch.layout()                              # the system bars settle after the window opens
+        if device.IS_ANDROID and self.frame % 600 == 1:      # a sign of life in `adb logcat`
+            print(f'[biggest-highway] frame {self.frame}  fps {window.fps_counter.text}  '
+                  f'km {self.player.s / 1000:.2f}  speed {self.player.kmh:.0f}')
         p = self.player
         self._scripted_setup()
         if self.args.scene == 'touch' and self.touch and self.frame > 2:   # a finger on the stick

@@ -4,6 +4,7 @@ Use android\\build_apk.ps1, which sets everything up and runs:
     .venv-android\\Scripts\\python setup.py bdist_apps
 and then turns the .aab bundle into an installable APK with bundletool.
 """
+import os
 import shutil
 import time
 from pathlib import Path
@@ -29,13 +30,21 @@ framebuffer-multisample 0
 sync-video true
 """
 
+# testing builds (BH_DEBUGGABLE=1): say more about graphics in `adb logcat`
+DEBUG_PRC = """
+notify-level-display info
+notify-level-gles2gsg info
+notify-level-android info
+gl-check-errors true
+"""
+
 # Ursina's own fonts, textures and models (it looks for them on disk, see game/device.py)
 URSINA_DATA = ('fonts', 'textures', 'models_compressed', 'audio')
 
 
 class AndroidBuildApps(build_apps):
-    def build_binaries(self, platform, binary_dir, data_dir=None):
-        super().build_binaries(platform, binary_dir, data_dir)
+    def build_binaries(self, platform, binary_dir, *args, **kwargs):
+        super().build_binaries(platform, binary_dir, *args, **kwargs)
         if platform.startswith('android'):
             self._fix_python_modules(platform, binary_dir)
 
@@ -82,6 +91,9 @@ class AndroidBuildApps(build_apps):
         tree = ET.parse(path)
         for act in tree.getroot().iter('activity'):
             act.set(f'{{{ns}}}screenOrientation', 'sensorLandscape')    # a driving game: landscape only
+        for app in tree.getroot().iter('application'):
+            # compressed native libraries: about half the download (they're unpacked on install)
+            app.set(f'{{{ns}}}extractNativeLibs', 'true')
         tree.write(path, encoding='utf-8', xml_declaration=True)
 
     def build_assets(self, platform, data_dir):
@@ -104,7 +116,12 @@ setup(
         'build_apps': {
             'application_id': APP_ID,
             'android_version_code': VERSION_CODE,
-            'android_abis': ['arm64-v8a', 'armeabi-v7a', 'x86_64'],
+            # 35+ forces edge-to-edge: the status bar stays on top and Panda3D's touch
+            # positions come out shifted by its height. 34 keeps a real fullscreen window.
+            'android_target_sdk_version': 34,
+            'android_debuggable': os.environ.get('BH_DEBUGGABLE') == '1',      # lets adb run-as look inside (testing)
+            # BH_ABIS=x86_64 makes a quicker build for the emulator only
+            'android_abis': os.environ.get('BH_ABIS', 'arm64-v8a,armeabi-v7a,x86_64').split(','),
             'gui_apps': {'BiggestHighway': 'main.py'},
             'platforms': ['android'],
             'plugins': ['pandagles2', 'p3openal_audio'],
@@ -115,7 +132,7 @@ setup(
                                       'ursina.shaders.*', 'ursina.scripts.*', 'gltf', 'gltf.*',
                                       'screeninfo', 'screeninfo.*']},
             'exclude_modules': {'*': ['tkinter', 'PIL', 'numpy', 'pytest', '_pytest', 'PyInstaller']},
-            'extra_prc_data': PRC,
+            'extra_prc_data': PRC + (DEBUG_PRC if os.environ.get('BH_DEBUGGABLE') == '1' else ''),
             'icons': {'*': ['assets/icon.png']},
             'build_base': str(ROOT / 'build-android' / 'build'),
         },

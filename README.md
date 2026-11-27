@@ -87,7 +87,11 @@ The same game runs on Android phones and tablets (Android 5.0 or later), package
 
 Saves go to the app's private storage. The Android app doesn't update itself like the exe: to update, install the new APK over the old one. Your save is kept, because every APK is signed with the same key.
 
-This is an early version. Its touch controls are tested in the PC game (`--touch`), but it hasn't been tested on real phones yet. If it doesn't start on your phone, please open an issue and include the output of `adb logcat -s Panda3D python.stdout python.stderr`.
+This is an early version. It's tested on the Android emulator (Android 14): the city, the highway, the car's screen, tapping the buttons, self-driving and the drive stick all work. It hasn't been tested on many real phones yet. Known issues:
+- The live 3D self-driving view on the car's screen stays blank on Android (everything else on that screen works).
+- The status bar stays visible at the top.
+
+If it doesn't start on your phone, please open an issue and include the output of `adb logcat -s Panda3D python.stdout python.stderr`.
 
 ## Run from source
 
@@ -213,7 +217,13 @@ This makes `dist\BiggestHighway.apk`, a single APK for ARM (64- and 32-bit) and 
 
 The signing key is made on the first build and kept in `%USERPROFILE%\.android\biggest-highway.keystore`, outside the repo. **Keep it:** Android only installs an update over an app signed with the same key. Set `BH_KEYSTORE` and `BH_KEYSTORE_PASS` to use a different key.
 
-On the phone the game copies its files out of the APK to the app's storage on the first start (and after each update), because Ursina loads models and textures from normal files.
+What the Android version does differently (all in `game/device.py`, used only on Android):
+- **Files:** on the first start (and after each update) it unpacks its files from the APK to the app's storage, because Ursina loads models and textures from normal files.
+- **Shaders:** phones use OpenGL ES, so Ursina's desktop GLSL shaders are translated to GLSL ES 3.00 just before they compile.
+- **Drawing:** see-through objects use plain alpha blending (Ursina's "dual" mode needs an alpha test that OpenGL ES doesn't have, and turned the screen black), rounded shapes are split into plain triangles, and untextured objects get a one-channel white texture.
+- **Touch:** Panda3D measures touches from below the status bar but draws from the top of the screen, so the game adds the status bar's height back, and keeps its buttons clear of the system bars.
+
+**Testing on the emulator.** With the Android SDK's emulator and `adb` installed, `android\test_on_emulator.ps1` installs the APK, starts it, and saves its log and a screenshot to `shots\`. For a quicker emulator-only build, set `$env:BH_ABIS='x86_64'` before building.
 
 ## Saves
 

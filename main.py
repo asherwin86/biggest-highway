@@ -18,6 +18,7 @@ def _android_start():
     from game import device
     if not device.IS_ANDROID:
         return None
+    device.patch_inspect_for_frozen_code()
     root = device.prepare_android_files()
     os.chdir(root)
     sys.argv = [str(root / 'main.py')]        # Ursina finds its asset folder from this
@@ -48,6 +49,9 @@ def main():
     from ursina import Ursina
     if android_root is not None:
         device.point_ursina_at(android_root)
+        device.patch_ursina_shaders_for_gles()
+        device.patch_ursina_transparency_for_gles()
+        device.patch_ursina_meshes_for_gles()
         here = android_root
     else:
         here = Path(getattr(sys, '_MEIPASS', Path(_here).resolve().parent))
@@ -63,6 +67,10 @@ def main():
 
     from game.app import Game
     Game(args)
+    if android_root is not None:
+        print(f'[biggest-highway] replaced {device.replace_old_shaders()} desktop shaders')
+        device.install_white_default_texture()
+        print(f'[biggest-highway] switched {device.fix_dual_transparency()} models to alpha blending')
     app.run()
 
 

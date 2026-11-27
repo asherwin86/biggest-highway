@@ -56,22 +56,27 @@ class TouchControls:
 
     # ------------------------------------------------------------------ layout
     def layout(self):
+        from .. import device
         a = window.aspect_ratio
         self._aspect = a
+        # keep the controls out from under the phone's status and navigation bars
+        h = max(1, window.size[1])
+        il, it, ir, ib = (v / h for v in device.content_insets)
         # the car's screen: as big as the window allows (it was made for 16:9)
         dash = self.g.dashboard.root
-        s = max(1.0, min(1.3, a * 0.98 / 1.66))
+        s = max(1.0, min(1.3, (a - il - ir) * 0.98 / 1.66))
         dash.scale = s
-        dash.y = -0.495 + 0.49 * s
+        dash.x = (il - ir) / 2
+        dash.y = -0.495 + ib + 0.49 * s
         top = dash.y - 0.18 * s                       # top edge of the car's screen
-        self.cx, self.cy = a / 2 - 0.2, top + 0.08 + self.R + 0.06
+        self.cx, self.cy = a / 2 - ir - 0.2, top + 0.08 + self.R + 0.06
         self.base.position = (self.cx, self.cy, 0)
         self.knob.position = (self.cx, self.cy, -0.02)
         self.lbl_go.position = (self.cx, self.cy + self.R + 0.025, -0.03)
         self.lbl_brake.position = (self.cx, self.cy - self.R - 0.025, -0.03)
-        x = -a / 2 + 0.11
+        x = -a / 2 + il + 0.11
         for i, b in enumerate(self.buttons.values()):
-            b.position = (x, 0.43 - i * 0.09, 0)
+            b.position = (x, 0.43 - it - i * 0.09, 0)
         self.up_btn.position = (self.cx - self.R - 0.13, self.cy + 0.06, 0)
         self.down_btn.position = (self.cx - self.R - 0.13, self.cy - 0.06, 0)
 
@@ -160,12 +165,20 @@ def install_tap_fix():
     """A finger jumps straight to where it touches, without moving there first like a
     mouse does. Ursina only works out which button is under the pointer once per
     frame, so a tap could hit the button touched last time. Re-check right before
-    every press is handled."""
+    every press is handled. (On Android, first make sure the status-bar offset is known.)"""
+    import time
     from ursina import application
+    from .. import device
     base = application.base
+    last = [-1e9]
+    if device.IS_ANDROID:
+        device.fix_touch_offset()
 
     def button_down(key):
         if key == 'mouse1':
+            if device.IS_ANDROID and time.monotonic() - last[0] > 5:
+                last[0] = time.monotonic()
+                device.refresh_touch_offset()
             mouse.update()
         base.input(key)
 
